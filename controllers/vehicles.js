@@ -1,6 +1,34 @@
 const {validationResult} = require('express-validator');
 
 const Vehicle = require('../models/vehicle');
+const Feedback = require('../models/feedback');
+
+const getVehiclesByQuery = (queryObject, currentPage, perPage, res, next) => {
+    let totalItems;
+
+    Vehicle.countDocuments(queryObject)
+        .then(count => {
+            totalItems = count;
+            return Vehicle.find(queryObject)
+                .skip(currentPage * perPage)
+                .limit(perPage);
+        })
+        .then(vehicles => {
+            const responseJson = {
+                message: 'Fetched vehicles.',
+                vehicles: vehicles,
+                totalItems: totalItems
+            };
+            res.status(200).json(responseJson);
+            console.log(responseJson);
+        })
+        .catch(err => {
+            if (!err.statusCode) {
+                err.statusCode = 500;
+            }
+            next(err);
+        });
+};
 
 exports.addVehicle = (req, res, next) => {
     const errors = validationResult(req);
@@ -68,23 +96,15 @@ exports.getVehicleById = (req, res, next) => {
 };
 
 exports.getRecent = (req, res, next) => {
-};
-
-exports.search = (req, res, next) => {
-};
-
-exports.getAll = (req, res, next) => {
-    const perPage = parseInt(req.query.perPage) || 10;
-    const currentPage = parseInt(req.query.currentPage) || 0;
-    const uf = req.query.uf;
-    const alertMode = req.query.alertMode === 'true';
+    const perPage = parseInt(req.get('Per-Page')) || 10;
+    const currentPage = parseInt(req.get("Current-Page")) || 0;
     let totalItems;
-    const queryObject = {alert_mode: alertMode, plate_uf: uf};
 
-    Vehicle.countDocuments(queryObject)
+    Vehicle.countDocuments()
         .then(count => {
             totalItems = count;
-            return Vehicle.find(queryObject)
+            return Vehicle.find()
+                .sort({date_added: 'desc'})
                 .skip(currentPage * perPage)
                 .limit(perPage);
         })
@@ -105,6 +125,70 @@ exports.getAll = (req, res, next) => {
         });
 };
 
-exports.provideFeedback = (req, res, next) => {
+exports.search = (req, res, next) => {
+    const perPage = parseInt(req.query.per_page) || 10;
+    const currentPage = parseInt(req.query.current_page) || 0;
+    const uf = req.query.uf === 'all' ? null : req.query.uf;
+    const color = req.query.color === 'all' ? null : req.query.color;
+    const term = req.query.term;
 
+    const or_conditions = [{'name': {$regex: term, $options: 'i'}}, {'plate_number': {$regex: term, $options: 'i'}},
+        {'plate_city': {$regex: term, $options: 'i'}}, {'plate_uf': {$regex: term, $options: 'i'}},
+        {'color': {$regex: term, $options: 'i'}}];
+
+    const and_conditions = [
+        {'plate_uf': {$regex: uf, $options: 'i'}},
+        {'color': {$regex: color, $options: 'i'}}];
+
+    const queryObject = {
+        $and: and_conditions,
+        $or: or_conditions
+    };
+
+    getVehiclesByQuery(queryObject, currentPage, perPage, res, next);
+};
+
+exports.getAll = (req, res, next) => {
+    const perPage = parseInt(req.query.per_page) || 10;
+    const currentPage = parseInt(req.query.current_page) || 0;
+    const uf = req.query.uf;
+    const alertMode = req.query.alert_mode === 'true';
+
+    const queryObject = {alert_mode: alertMode, plate_uf: uf};
+
+    getVehiclesByQuery(queryObject, currentPage, perPage, res, next);
+};
+
+exports.provideFeedback = (req, res, next) => {
+    const id = req.params.id;
+    const feedback = req.body.feedback;
+    const confirmation = req.body.confirmation;
+
+    Vehicle.findById(id)
+        .then(vehicle => {
+            if (!vehicle) {
+                const error = new Error('Could not find vehicle.');
+                error.statusCode = 404;
+                throw error;
+            }
+            const feedbackObj = new Feedback({
+                feedback: feedback,
+                confirmation: confirmation,
+                vehicleId: id
+            });
+
+            feedbackObj.save();
+        })
+        .then(result => {
+            res.status(201).json({
+                message: 'Feedback just posted.',
+                feedback: result
+            })
+        })
+        .catch(err => {
+            if (!err.statusCode) {
+                err.statusCode = 500;
+            }
+            next(err);
+        });
 };

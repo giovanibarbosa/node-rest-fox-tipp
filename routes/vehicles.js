@@ -17,4 +17,6 @@ router.post('/vehicle/:id/feedback', controller.provideFeedback);
 
 router.post('/vehicle/', controller.addVehicle);
 
+router.post('/vehicle/:id/feedback', controller.provideFeedback);
+
 module.exports = router;

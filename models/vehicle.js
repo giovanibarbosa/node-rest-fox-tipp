@@ -31,7 +31,12 @@ const vehicleSchema = new Schema({
     },
     alert_mode: {
         type: Boolean
-    }
+    },
+    feedback_list: [
+        {
+            feedbackId: {type: Schema.Types.ObjectId, ref: 'Feedback'}
+        }
+    ]
 });
 
 module.exports = mongoose.model('Vehicle', vehicleSchema);
